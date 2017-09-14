@@ -6,11 +6,33 @@ GameEvent = {};
 GameEvent.AssetsLoaded = 'AssetsLoaded';
 GameEvent.GameOver = 'GameOver';
 
+const WIDTH = 1280;
+const HEIGHT = 720;
+
+window.addEventListener('resize', () => {
+    let width = window.innerWidth;
+    let height = window.innerHeight;
+
+    let ratio = width / height;
+    let originRatio = WIDTH / HEIGHT;
+    if (ratio < originRatio) {
+        // portrate, портретная
+        app.app.view.style.width = `${width}px`;
+        app.app.view.style.height = `auto`;
+    } else {
+        // landscape, альбомная
+        app.app.view.style.width = `auto`;
+        app.app.view.style.height = `${height}px`;
+    }
+
+});
+
 class App extends PIXI.utils.EventEmitter {
     constructor() {
         super();
 
-        this.app = new PIXI.Application(window.innerWidth - 50, window.innerHeight - 50, {backgroundColor: 0xFFFFFF});
+        this.app = new PIXI.Application(WIDTH, HEIGHT, {backgroundColor: 0xFFFFFF});
+        //this.app = new PIXI.Application(window.innerWidth - 50, window.innerHeight - 50, {backgroundColor: 0xFFFFFF});
         document.body.appendChild(this.app.view);
 
         this.app.gameLayer = new PIXI.Container();
@@ -39,9 +61,9 @@ app.on(GameEvent.AssetsLoaded, run);
 const loader = new PIXI.loaders.Loader();
 loader.add('start', 'images/button_start.png');
 loader.add('road', 'images/road.jpg');
-loader.add('auto', 'images/auto.gif');
+loader.add('auto', 'images/auto.png');
 
-loader.add('auto2', 'images/auto2.gif');
+loader.add('auto2', 'images/auto2.png');
 loader.add('auto3', 'images/auto3.png');
 loader.add('auto4', 'images/auto4.png');
 loader.add('auto5', 'images/auto5.png');
@@ -71,6 +93,7 @@ let mainAuto;
 let enemyAuto;
 let play;
 let startButtonContainer;
+let startButton;
 let scoreText;
 let score = 0;
 let time = 3500;
@@ -79,19 +102,12 @@ let leaderboardContainer;
 let nameInput;
 let name = '';
 let resultArr = [0];
-// let rectangle;
-// let saveButton;
+let gameOverSprite;
+let saveButton;
 let leaderboardBackground;
-// let resultName;
-// let resultScore;
-// let nameLabel;
-// let scoreLabel;
-// let styleTextActiveAndResultWindow;
 const CARS_COUNT = 7;
 
 function run() {
-    const WIDTH = window.innerWidth;
-    const HEIGHT = window.innerHeight;
     app.gameLayer.pivot.set(0.5);
     app.gameLayer.x = WIDTH / 2;
     app.gameLayer.y = HEIGHT / 2;
@@ -123,7 +139,7 @@ function startGame() {
         scaleY: 0.5
     }, 300, createjs.Ease.backInOut);
 
-    let startButton = new PIXI.Sprite(textures.start);
+    startButton = new PIXI.Sprite(textures.start);
     startButton.anchor.set(0.5);
     startButton.x = -5;
     startButton.y = -50;
@@ -143,32 +159,33 @@ function startGame() {
     startButtonContainer.addChild(startText);
 
     app.gameLayer.addChild(startButtonContainer);
+    startButtonContainer.on('click', startButtonContainerEvent);
+}
 
-    //TODO: fix play function
-    play = () => {
-        startButtonContainer.off('click', play);
-        app.gameLayer.removeChild(startButtonContainer);
-        startButtonContainer.destroy({children: true});
-        startButtonContainer = null;
-        startButton = null;
-        startText = null;
+function startButtonContainerEvent() {
+    // startButtonContainer.on('click', () => {
+    //     startButtonContainer.off('click', play);
+    app.gameLayer.removeChild(startButtonContainer);
+    startButtonContainer.destroy({children: true});
+    startButtonContainer = null;
+    startButton = null;
+    startText = null;
 
-        createScore();
-        createMainAuto();
-        createEnemyCars();
-        collision();
-    };
-    startButtonContainer.on('click', play);
-
+    createScore();
+    createMainAuto();
+    createEnemyCars();
+    // })
 }
 
 //---------------------mainAuto--------------------------
 function createMainAuto() {
+    console.log(app.stage.width);
     mainAuto = new PIXI.Sprite(textures.auto);
     mainAuto.anchor.set(0.5);
-    mainAuto.scale.set(0.31);
+    mainAuto.scale.set(0.5);
     mainAuto.x = -300;
     mainAuto.y = 90;
+    mainAuto.background = '0xFFFFFF';
     mainAuto = app.gameLayer.addChild(mainAuto);
 }
 
@@ -196,7 +213,13 @@ function onKeyPress(event) {
             moveRight();
             break;
         case 13:
-            play();
+            if (startButtonContainer && startButtonContainer.buttonMode === true) {
+                startButtonContainerEvent();
+            } else if (gameOverSprite && gameOverSprite.buttonMode === true) {
+                gameOverSpriteEvent();
+            } else if (saveButton && saveButton.buttonMode === true) {
+                saveButtonEvent();
+            }
             break;
     }
 }
@@ -208,12 +231,14 @@ window.onkeydown = function (event) {
 
 //---------------------autoSecond--------------------------
 function createEnemyCars() {
-    let random = Math.floor(Math.random() * CARS_COUNT);
+    let random = Math.floor(Math.random() * 7);
     enemyAuto = app.gameLayer.addChildAt(new PIXI.Sprite(autoTextures[random]), 1);
     enemyAuto.anchor.set(0.5);
-    enemyAuto.scale.set(0);
     enemyAuto.x = 0;
     enemyAuto.y = -40;
+    enemyAuto.halfWidth = enemyAuto.width / 2;
+    enemyAuto.halfHeight = enemyAuto.height / 2;
+    enemyAuto.scale.set(0);
     moveEnemyCars();
 }
 
@@ -258,41 +283,65 @@ function changeSpeed() {
 
 //---------------------moveEnemyCars-------------------------
 function moveEnemyCars() {
-    let toX = Math.random() <= 0.5 ? 240 : -240;
-    createjs.Tween.get(enemyAuto)
+    let toX = Math.random() <= 0.5 ? 260 : -260;
+    createjs.Tween.get(enemyAuto, {override: true})
         .to({
             x: toX,
-            y: 45,
+            y: 70,
             scaleX: 0.9,
             scaleY: 0.9
         }, changeSpeed())
         .call(() => {
-            createjs.Tween.get(enemyAuto)
-                .to({
-                    x: toX > 0 ? toX + 80 : toX - 80,
-                    y: 60,
-                    scaleX: 1.2,
-                    scaleY: 1.2
-                }, 1000)
-                .to({alpha: 0}, 500)
-                .call(() => increaseScore())
-                .call(() => {
-                    app.gameLayer.removeChild(enemyAuto);
-                    createEnemyCars();
-                    scoreText.text = score;
-                })
-                .on('change', () => collision());
+            let tween = createjs.Tween.get(enemyAuto, {override: true});
+            tween.to({
+                x: toX > 0 ? toX + 72.2 : toX - 72.2,
+                y: 100.55,
+                scaleX: 1.15,
+                scaleY: 1.15
+            }, 972.2)
+            tween.to({alpha: 0}, 500)
+            tween.call(() => {
+                increaseScore();
+                // debugger
+                tween.setPaused(true);
+                console.log('TWEEN COMPLETE');
+                app.gameLayer.removeChild(enemyAuto);
+                createEnemyCars();
+                scoreText.text = score;
+            })
+            tween.on('change', () => {
+                console.log('main.x =', mainAuto.x);
+                console.log('enemy.x =', enemyAuto.x);
+                if (enemyAuto.x === 0) return
+                collision(toX)
+            });
         });
 }
 
 //---------------------collision----------------------------------
-function hit(mainAuto, enemyAuto) {
-    return app.bump.hit(mainAuto, enemyAuto);
+function hit(mainAuto, enemyAuto, isLeft = false) {
+    // let hit = app.bump.hit(mainAuto, enemyAuto);
+    let hit = false;
+    let mainRightX = mainAuto.x + mainAuto.width / 2;
+    let mainLeftX = mainAuto.x - mainAuto.width / 2;
+    let enemyLeftX = enemyAuto.x - enemyAuto.width / 2;
+    let enemyRightX = enemyAuto.x + enemyAuto.width / 2;
+    console.log('isLeft', isLeft);
+    if (isLeft) {
+        if (enemyRightX >= mainLeftX) hit = true;
+    } else {
+        if (enemyLeftX <= mainRightX) {
+            // debugger
+            hit = true;
+        }
+    }
+    if (hit) console.log('!!!!!!!!!!!!!!COLOSION')
+    return hit
 }
 
 //-----------condition collision-------------------------
-function collision() {
-    if (hit(mainAuto, enemyAuto)) {
+function collision(toX) {
+    if (hit(mainAuto, enemyAuto, toX < 0)) {
         createjs.Tween.removeTweens(enemyAuto);
         collisionEffect();
         app.emit(GameEvent.GameOver);
@@ -301,37 +350,17 @@ function collision() {
 
 //---------------Blinking auto after collision---------------
 function collisionEffect() {
-    createjs.Tween.get(enemyAuto)
-        .to({alpha: 0}, 60)
-        .to({alpha: 1}, 60)
-        .to({alpha: 0}, 60)
-        .to({alpha: 1}, 60)
-        .to({alpha: 0}, 60)
-        .to({alpha: 1}, 60)
-        .to({alpha: 0}, 60)
-        .to({alpha: 1}, 60)
-        .to({alpha: 0}, 60)
-        .to({alpha: 1}, 60)
-        .to({alpha: 0}, 60)
-        .to({alpha: 1}, 60)
-        .to({alpha: 0}, 60)
-        .to({alpha: 1}, 60)
+    createjs.Tween.get(enemyAuto).wait(1000).play(
+        createjs.Tween.get(enemyAuto, {loop: true})
+            .to({alpha: 0}, 60)
+            .to({alpha: 1}, 60)
+    )
         .call(() => app.gameLayer.removeChild(enemyAuto));
-    createjs.Tween.get(mainAuto)
-        .to({alpha: 0}, 60)
-        .to({alpha: 1}, 60)
-        .to({alpha: 0}, 60)
-        .to({alpha: 1}, 60)
-        .to({alpha: 0}, 60)
-        .to({alpha: 1}, 60)
-        .to({alpha: 0}, 60)
-        .to({alpha: 1}, 60)
-        .to({alpha: 0}, 60)
-        .to({alpha: 1}, 60)
-        .to({alpha: 0}, 60)
-        .to({alpha: 1}, 60)
-        .to({alpha: 0}, 60)
-        .to({alpha: 1}, 60)
+    createjs.Tween.get(mainAuto).wait(1000).play(
+        createjs.Tween.get(mainAuto, {loop: true})
+            .to({alpha: 0}, 60)
+            .to({alpha: 1}, 60)
+    )
         .call(() => app.gameLayer.removeChild(mainAuto));
 }
 
@@ -339,7 +368,7 @@ function collisionEffect() {
 function gameOver() {
     app.off(GameEvent.GameOver, gameOver);
 
-    let gameOverSprite = new PIXI.Sprite(textures.gameOver);
+    gameOverSprite = new PIXI.Sprite(textures.gameOver);
     gameOverSprite.anchor.set(0.5);
     gameOverSprite.y = -50;
     gameOverSprite.scale.set = 0.9;
@@ -358,18 +387,20 @@ function gameOver() {
         scaleY: 0.9
     }, 300, createjs.Ease.backInOut);
 
-    gameOverSprite.on('click', () => {
-            app.gameLayer.removeChild(gameOverSprite);
-            enemyAuto && createjs.Tween.removeTweens(enemyAuto);
-            enemyAuto && app.gameLayer.removeChild(enemyAuto);
-            enemyAuto = null;
+    gameOverSprite.on('click', gameOverSpriteEvent);
+}
 
-            app.gameLayer.removeChild(scoreText);
+function gameOverSpriteEvent() {
+    app.gameLayer.removeChild(gameOverSprite);
+    enemyAuto && createjs.Tween.removeTweens(enemyAuto);
+    enemyAuto && app.gameLayer.removeChild(enemyAuto);
+    enemyAuto = null;
+    gameOverSprite = null;
 
-            createResultWindow();
-            time = 3500;
-        }
-    )
+    app.gameLayer.removeChild(scoreText);
+
+    createResultWindow();
+    time = 3500;
 }
 
 //--------------Active window-----------------
@@ -388,6 +419,10 @@ function createResultWindow() {
     createInputName();
     createSaveButton();
     createCancelLeaderboardBtn();
+
+
+    saveButton.buttonMode = true;
+    saveButton.interactive = true;
 }
 
 //--------------text active window---------------
@@ -446,7 +481,62 @@ function createInputName() {
     nameInput = new PixiTextInput('', {fontSize: 30});
     nameInput.x = -150;
     nameInput.y = 80;
+    nameInput.focus();
     resultWindowContainer.addChild(nameInput);
+}
+
+//------------------button save player`s result and cancel button -------------------
+function createSaveButton() {
+    saveButton = new PIXI.Sprite(textures.saveButton);
+    saveButton.anchor.set(0.5);
+    saveButton.scale.set(0.2);
+    saveButton.y = 155;
+
+    saveButton = resultWindowContainer.addChild(saveButton);
+
+    saveButton.on('click', saveButtonEvent);
+}
+
+function saveButtonEvent() {
+    if (nameInput.text.length > 2) {
+        createjs.Tween.get(saveButton)
+            .to({
+                scaleX: 0.15,
+                scaleY: 0.15
+            }, 50)
+            .wait(50)
+            .to({
+                scaleX: 0.2,
+                scaleY: 0.2
+            }, 100)
+            .wait(100)
+            .call(() => {
+                    resultArr = JSON.parse(localStorage.getItem('resultArr')) || [];
+                    resultArr.sort(sortResult);
+                    name = nameInput.text;
+                    if (resultArr.length >= CARS_COUNT) {
+                        if (score > resultArr[resultArr.length - 1].score) {
+                            resultArr.pop();
+                            resultArr.push({name: name, score: score});
+                            resultArr.length = 7;
+                        }
+                    } else {
+                        resultArr.push({name: name, score: score});
+                    }
+                    resultWindowContainer.destroy({children: true});
+                    saveData();
+                    createLeaderboardWindow();
+                }
+            )
+    } else {
+        let inputErrorText = new PIXI.Text('More than 2 symbols', {
+            fill: 0xFF0000,
+            fontSize: 15
+        });
+        inputErrorText.x = -150;
+        inputErrorText.y = 120;
+        resultWindowContainer.addChild(inputErrorText);
+    }
 }
 
 //-------------------leaderboardWindow---list of players  and cancel button result window----------------
@@ -515,83 +605,36 @@ function createCancelButton() {
 }
 
 function createCancelLeaderboardBtn() {
-    let cancelButton = createCancelButton();
-    cancelButton = resultWindowContainer.addChild(cancelButton);
-    cancelButton.x = 180;
-    cancelButton.y = -180;
-    cancelButton.on('click', () => {
+    let cancelButtonLeaderboard = createCancelButton();
+    cancelButtonLeaderboard = resultWindowContainer.addChild(cancelButtonLeaderboard);
+    cancelButtonLeaderboard.buttonMode = true;
+    cancelButtonLeaderboard.interactive = true;
+    cancelButtonLeaderboard.x = 180;
+    cancelButtonLeaderboard.y = -180;
+    cancelButtonLeaderboard.on('click', () => {
         resultWindowContainer.destroy({children: true});
         score = 0;
         startGame();
     });
 }
 
-//------------------button save player`s result and cancel button -------------------
-function createSaveButton() {
-    let saveButton = new PIXI.Sprite(textures.saveButton);
-    saveButton.anchor.set(0.5);
-    saveButton.scale.set(0.2);
-    saveButton.y = 155;
-    saveButton.buttonMode = true;
-    saveButton.interactive = true;
-    saveButton = resultWindowContainer.addChild(saveButton);
-
-    saveButton.on('click', () => {
-            if (nameInput.text.length > 2) {
-                createjs.Tween.get(saveButton)
-                    .to({
-                        scaleX: 0.15,
-                        scaleY: 0.15
-                    }, 50)
-                    .wait(50)
-                    .to({
-                        scaleX: 0.2,
-                        scaleY: 0.2
-                    }, 100)
-                    .wait(100)
-                    .call(() => {
-                            resultArr = JSON.parse(localStorage.getItem('resultArr')) || [];
-                            resultArr.sort(sortResult);
-                            name = nameInput.text;
-                            if (resultArr.length >= CARS_COUNT) {
-                                if (score > resultArr[resultArr.length - 1].score) {
-                                    resultArr.pop();
-                                    resultArr.push({name: name, score: score});
-                                    resultArr.length = 7;//huj//huj//huj//huj//huj VERY BIG HUUUUUUUUJ
-                                }
-                            } else {
-                                resultArr.push({name: name, score: score});
-                            }
-                            resultWindowContainer.destroy({children: true});
-                            saveData();
-                            createLeaderboardWindow();
-                        }
-                    )
-            } else {
-                let inputErrorText = new PIXI.Text('More than 2 symbols', {
-                    fill: 0xFF0000,
-                    fontSize: 15
-                });
-                inputErrorText.x = -150;
-                inputErrorText.y = 120;
-                resultWindowContainer.addChild(inputErrorText);
-            }
-        }
-    )
-}
 
 //------------------cancel button ResultWindow--------------------
 function cancelButtonResultWindow() {
-    let cancelButton = createCancelButton();
-    cancelButton.x = 230;
-    cancelButton.y = -230;
-    cancelButton.on('click', () => {
-        leaderboardContainer.destroy({children: true});
-        score = 0;
-        startGame();
-    });
-    leaderboardContainer.addChild(cancelButton);
+    let cancelButtonResultWindow = createCancelButton();
+    cancelButtonResultWindow.x = 230;
+    cancelButtonResultWindow.y = -230;
+    cancelButtonResultWindow.on('click', cancelButtonResultWindowEvent);
+    leaderboardContainer.addChild(cancelButtonResultWindow);
 }
+
+function cancelButtonResultWindowEvent() {
+    debugger
+    leaderboardContainer.destroy({children: true});
+    score = 0;
+    startGame();
+}
+
 
 function saveData() {
     localStorage.setItem('resultArr', JSON.stringify(resultArr));
